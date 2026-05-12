@@ -4,7 +4,11 @@ declare const process: {
   }
 }
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '')
+const DEFAULT_RENDER_API_URL = 'https://skin-burn-detection-gdy1.onrender.com'
+
+export const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || DEFAULT_RENDER_API_URL
+).replace(/\/+$/, '')
 
 export async function checkBackendHealth() {
   try {
@@ -19,7 +23,13 @@ export async function checkBackendHealth() {
       throw new Error('Backend health check failed.')
     }
 
-    return response.json()
+    const data = await response.json()
+
+    if (data?.status !== 'ok') {
+      throw new Error('Backend health check returned an unexpected response.')
+    }
+
+    return data
   } catch (error) {
     throw new Error(getFetchErrorMessage(error))
   }
@@ -27,7 +37,7 @@ export async function checkBackendHealth() {
 
 function getFetchErrorMessage(error: unknown) {
   if (error instanceof TypeError) {
-    return `Unable to reach the backend at ${API_URL}. Make sure the FastAPI server is running.`
+    return `Unable to reach the backend at ${API_URL}. Make sure NEXT_PUBLIC_API_URL points to the deployed FastAPI backend.`
   }
   return error instanceof Error ? error.message : 'Request failed.'
 }

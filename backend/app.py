@@ -1,5 +1,6 @@
 import os
 import math
+import re
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
@@ -43,31 +44,71 @@ SEARCH_RADIUS_KM = 5
 MAX_SEARCH_RESULTS = 10
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 ALGORITHM = 'HS256'
+DEFAULT_FRONTEND_ORIGINS = (
+    'http://localhost:3000,'
+    'http://127.0.0.1:3000,'
+    'https://*.vercel.app'
+)
+
+
+def get_allowed_origins() -> list[str]:
+    configured_origins = os.environ.get('FRONTEND_ORIGINS', DEFAULT_FRONTEND_ORIGINS)
+    return [origin.strip() for origin in configured_origins.split(',') if origin.strip() and '*' not in origin]
+
+
+def get_allowed_origin_regex() -> Optional[str]:
+    configured_origins = os.environ.get('FRONTEND_ORIGINS', DEFAULT_FRONTEND_ORIGINS)
+    wildcard_origins = [origin.strip() for origin in configured_origins.split(',') if '*' in origin]
+    if not wildcard_origins:
+        return None
+
+    patterns = []
+    for origin in wildcard_origins:
+        escaped = origin.replace('.', r'\.').replace('*', r'[^.]+')
+        patterns.append(escaped)
+    return '^(' + '|'.join(patterns) + ')$'
 
 app = FastAPI(title='Skin Burn Detection API')
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
-    allow_credentials=False,
+    allow_origins=get_allowed_origins(),
+    allow_origin_regex=get_allowed_origin_regex(),
+    allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
 )
 
 @app.middleware('http')
 async def add_explicit_cors_headers(request: Request, call_next):
+    origin = request.headers.get('origin')
+    allowed_origins = set(get_allowed_origins())
+    allowed_origin_regex = get_allowed_origin_regex()
+    allow_origin = None
+
+    if origin:
+        if origin in allowed_origins:
+            allow_origin = origin
+        elif allowed_origin_regex and re.match(allowed_origin_regex, origin):
+            allow_origin = origin
+
     if request.method == 'OPTIONS':
         headers = {
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': allow_origin or '',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept, Origin, User-Agent, Referer, Accept-Encoding',
+            'Access-Control-Allow-Credentials': 'true',
+            'Vary': 'Origin',
         }
         return Response(status_code=204, headers=headers)
 
     response = await call_next(request)
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Accept, Origin, User-Agent, Referer, Accept-Encoding'
+    if allow_origin:
+        response.headers['Access-Control-Allow-Origin'] = allow_origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Accept, Origin, User-Agent, Referer, Accept-Encoding'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
     return response
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
@@ -361,7 +402,7 @@ def root():
 @app.get('/health')
 def health():
     """Health check endpoint to verify backend is running."""
-    return {'status': 'healthy', 'service': 'Skin Burn Detection API'}
+    return {'status': 'ok'}
 
 
 @app.post('/register', response_model=UserResponse, status_code=201)
