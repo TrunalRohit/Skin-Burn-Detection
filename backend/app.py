@@ -53,6 +53,7 @@ app.add_middleware(
         'http://127.0.0.1:3000',
         'https://skin-burn-detection.vercel.app',
     ],
+    allow_origin_regex=r'https://.*\.vercel\.app',
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
@@ -339,6 +340,11 @@ def fetch_nearby_places(latitude: float, longitude: float, api_key: str) -> List
         })
 
     return sorted([p for p in places if p['distance_km'] is not None], key=lambda x: x['distance_km'])
+
+
+@app.get('/')
+def root():
+    return {'status': 'ok', 'service': 'Skin Burn Detection API'}
 
 
 @app.get('/health')
