@@ -6,8 +6,6 @@ from datetime import datetime, timedelta, timezone
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)  # Parent directory (project root)
-MODEL_PATH = os.path.join(PROJECT_ROOT, 'my_model.h5')
 USERS_PATH = os.path.join(BASE_DIR, 'users.json')
 
 import json
@@ -49,6 +47,7 @@ DEFAULT_FRONTEND_ORIGINS = (
     'http://127.0.0.1:3000,'
     'https://*.vercel.app'
 )
+MODEL_FILENAME = 'my_model.h5'
 
 
 def get_allowed_origins() -> list[str]:
@@ -67,6 +66,34 @@ def get_allowed_origin_regex() -> Optional[str]:
         escaped = origin.replace('.', r'\.').replace('*', r'[^.]+')
         patterns.append(escaped)
     return '^(' + '|'.join(patterns) + ')$'
+
+
+def get_model_path_candidates() -> list[str]:
+    configured_model_path = os.environ.get('MODEL_PATH', '').strip()
+    current_working_dir = os.getcwd()
+    parent_dir = os.path.dirname(BASE_DIR)
+
+    candidates = [
+        configured_model_path,
+        os.path.join(BASE_DIR, MODEL_FILENAME),
+        os.path.join(parent_dir, MODEL_FILENAME),
+        os.path.join(current_working_dir, MODEL_FILENAME),
+        os.path.join('/app', MODEL_FILENAME),
+        os.path.join('/opt/render/project/src', MODEL_FILENAME),
+    ]
+
+    unique_candidates: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in unique_candidates:
+            unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def resolve_model_path() -> Optional[str]:
+    for candidate in get_model_path_candidates():
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 app = FastAPI(title='Skin Burn Detection API')
 
@@ -127,14 +154,21 @@ def get_google_api_key() -> str:
 
 @lru_cache(maxsize=1)
 def load_model() -> tf.keras.Model:
-    return tf.keras.models.load_model(MODEL_PATH)
+    model_path = resolve_model_path()
+    if not model_path:
+        raise FileNotFoundError('Model file could not be found in any expected location.')
+    return tf.keras.models.load_model(model_path)
 
 
 def get_model() -> tf.keras.Model:
-    if not os.path.exists(MODEL_PATH):
+    model_path = resolve_model_path()
+    if not model_path:
         raise HTTPException(
             status_code=500,
-            detail=f'Model file not found at {MODEL_PATH}. Ensure my_model.h5 is deployed on Render.',
+            detail=(
+                'Model file not found. Ensure my_model.h5 is deployed on Render. '
+                f'Checked: {", ".join(get_model_path_candidates())}'
+            ),
         )
 
     try:
@@ -144,7 +178,7 @@ def get_model() -> tf.keras.Model:
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f'Unable to load model from {MODEL_PATH}: {exc}',
+            detail=f'Unable to load model from {model_path}: {exc}',
         ) from exc
 
 
@@ -420,9 +454,12 @@ def root():
 @app.get('/health')
 def health():
     """Health check endpoint to verify backend is running."""
+    model_path = resolve_model_path()
     return {
         'status': 'ok',
-        'model_exists': os.path.exists(MODEL_PATH),
+        'model_exists': model_path is not None,
+        'model_path': model_path,
+        'model_candidates': get_model_path_candidates(),
     }
 
 
