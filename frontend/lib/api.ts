@@ -5,9 +5,12 @@ declare const process: {
 }
 
 const DEFAULT_RENDER_API_URL = 'https://skin-burn-detection-gdy1.onrender.com'
+const INTERNAL_API_PROXY = '/api/backend'
 
 export const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL || DEFAULT_RENDER_API_URL
+  typeof window === 'undefined'
+    ? process.env.NEXT_PUBLIC_API_URL || DEFAULT_RENDER_API_URL
+    : INTERNAL_API_PROXY
 ).replace(/\/+$/, '')
 
 export async function checkBackendHealth() {
