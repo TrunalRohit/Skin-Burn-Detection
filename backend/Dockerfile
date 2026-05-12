@@ -1,4 +1,5 @@
-# Use Debian-based Python to ensure glibc manylinux wheels are available
+# This Dockerfile is meant to be built from the repository root
+# with Dockerfile path set to backend/Dockerfile.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -16,14 +17,14 @@ RUN apt-get update \
        zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
-COPY requirements.txt /app/requirements.txt
+# Copy backend requirements and install dependencies
+COPY backend/requirements.txt /app/requirements.txt
 RUN python -m pip install --upgrade pip setuptools wheel
 RUN pip install -r /app/requirements.txt
 
-# Copy backend sources
-COPY . /app
+# Copy backend code and model into the container
+COPY backend /app/backend
+COPY my_model.h5 /app/my_model.h5
 
-# Expose port and run
 EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
