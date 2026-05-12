@@ -18,7 +18,7 @@ from typing import List, Optional
 import numpy as np
 import requests
 import tensorflow as tf
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from jose import jwt
@@ -53,6 +53,22 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+@app.middleware('http')
+async def add_explicit_cors_headers(request: Request, call_next):
+    if request.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept, Origin, User-Agent, Referer, Accept-Encoding',
+        }
+        return Response(status_code=204, headers=headers)
+
+    response = await call_next(request)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Accept, Origin, User-Agent, Referer, Accept-Encoding'
+    return response
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
