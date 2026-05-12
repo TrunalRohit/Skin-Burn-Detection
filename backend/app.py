@@ -341,6 +341,12 @@ def fetch_nearby_places(latitude: float, longitude: float, api_key: str) -> List
     return sorted([p for p in places if p['distance_km'] is not None], key=lambda x: x['distance_km'])
 
 
+@app.get('/health')
+def health():
+    """Health check endpoint to verify backend is running."""
+    return {'status': 'healthy', 'service': 'Skin Burn Detection API'}
+
+
 @app.post('/register', response_model=UserResponse, status_code=201)
 def register(payload: AuthRequest):
     email, password = validate_auth_input(payload)

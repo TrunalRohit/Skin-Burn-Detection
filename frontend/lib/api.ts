@@ -6,6 +6,25 @@ declare const process: {
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+export async function checkBackendHealth() {
+  try {
+    const response = await fetch(`${API_URL}/health`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('Backend health check failed.')
+    }
+
+    return response.json()
+  } catch (error) {
+    throw new Error(getFetchErrorMessage(error))
+  }
+}
+
 function getFetchErrorMessage(error: unknown) {
   if (error instanceof TypeError) {
     return `Unable to reach the backend at ${API_URL}. Make sure the FastAPI server is running.`
