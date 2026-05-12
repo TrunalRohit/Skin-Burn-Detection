@@ -130,6 +130,24 @@ def load_model() -> tf.keras.Model:
     return tf.keras.models.load_model(MODEL_PATH)
 
 
+def get_model() -> tf.keras.Model:
+    if not os.path.exists(MODEL_PATH):
+        raise HTTPException(
+            status_code=500,
+            detail=f'Model file not found at {MODEL_PATH}. Ensure my_model.h5 is deployed on Render.',
+        )
+
+    try:
+        return load_model()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f'Unable to load model from {MODEL_PATH}: {exc}',
+        ) from exc
+
+
 def preprocess_image(img: Image.Image) -> np.ndarray:
     image = img.convert('RGB').resize(IMG_SIZE)
     image_array = tf.keras.utils.img_to_array(image)
@@ -402,7 +420,10 @@ def root():
 @app.get('/health')
 def health():
     """Health check endpoint to verify backend is running."""
-    return {'status': 'ok'}
+    return {
+        'status': 'ok',
+        'model_exists': os.path.exists(MODEL_PATH),
+    }
 
 
 @app.post('/register', response_model=UserResponse, status_code=201)
@@ -446,21 +467,26 @@ async def predict(file: UploadFile = File(...)):
     except Exception:
         raise HTTPException(status_code=400, detail='Invalid image file.')
 
-    model = load_model()
-    img_array = preprocess_image(image)
-    prediction = model.predict(img_array, verbose=0)
-    prediction = prediction[0]
-    class_name = CLASSES[int(np.argmax(prediction))]
-    confidence = float(np.max(prediction) * 100.0)
-    advice = get_medical_advice(class_name)
-    return PredictionResponse(
-        class_name=class_name,
-        confidence=round(confidence, 2),
-        probabilities=[float(x * 100.0) for x in prediction.tolist()],
-        risk=get_risk_label(class_name),
-        risk_level=get_risk_level(class_name),
-        advice=advice,
-    )
+    try:
+        model = get_model()
+        img_array = preprocess_image(image)
+        prediction = model.predict(img_array, verbose=0)
+        prediction = prediction[0]
+        class_name = CLASSES[int(np.argmax(prediction))]
+        confidence = float(np.max(prediction) * 100.0)
+        advice = get_medical_advice(class_name)
+        return PredictionResponse(
+            class_name=class_name,
+            confidence=round(confidence, 2),
+            probabilities=[float(x * 100.0) for x in prediction.tolist()],
+            risk=get_risk_label(class_name),
+            risk_level=get_risk_level(class_name),
+            advice=advice,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f'Prediction failed: {exc}') from exc
 
 
 @app.post('/nearby', response_model=NearbyResponse)

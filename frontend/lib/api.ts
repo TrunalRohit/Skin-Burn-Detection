@@ -38,6 +38,24 @@ export async function checkBackendHealth() {
   }
 }
 
+async function getErrorMessageFromResponse(response: Response, fallbackMessage: string) {
+  const contentType = response.headers.get('content-type') || ''
+
+  if (contentType.includes('application/json')) {
+    const data = await response.json().catch(() => null)
+    if (data?.detail && typeof data.detail === 'string') {
+      return data.detail
+    }
+  }
+
+  const text = await response.text().catch(() => '')
+  if (text.trim()) {
+    return text.trim()
+  }
+
+  return fallbackMessage
+}
+
 function getFetchErrorMessage(error: unknown) {
   if (error instanceof TypeError) {
     return `Unable to reach the backend at ${API_URL}. Make sure NEXT_PUBLIC_API_URL points to the deployed FastAPI backend.`
@@ -103,8 +121,7 @@ export async function predictImage(file: File) {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => null)
-      throw new Error(error?.detail || 'Prediction request failed.')
+      throw new Error(await getErrorMessageFromResponse(response, 'Prediction request failed.'))
     }
 
     return response.json()
@@ -128,8 +145,7 @@ export async function searchNearby(location: {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => null)
-      throw new Error(error?.detail || 'Nearby search request failed.')
+      throw new Error(await getErrorMessageFromResponse(response, 'Nearby search request failed.'))
     }
 
     return response.json()
@@ -159,8 +175,7 @@ export async function downloadReport(payload: {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => null)
-      throw new Error(error?.detail || 'Report generation failed.')
+      throw new Error(await getErrorMessageFromResponse(response, 'Report generation failed.'))
     }
 
     return response.blob()
