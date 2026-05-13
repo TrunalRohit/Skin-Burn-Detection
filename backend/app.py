@@ -460,6 +460,7 @@ def health():
         'model_exists': model_path is not None,
         'model_path': model_path,
         'model_candidates': get_model_path_candidates(),
+        'google_maps_api_key_configured': bool(os.environ.get(GOOGLE_MAPS_API_KEY_ENV, '').strip()),
     }
 
 
